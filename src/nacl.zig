@@ -4,7 +4,9 @@ const c = @cImport({
 });
 
 pub const crypto_box = @import("crypto_box.zig");
+pub const secretstream = @import("secretstream.zig");
 
 test "nacl" {
     _ = @import("crypto_box.zig");
+    _ = @import("secretstream.zig");
 }
