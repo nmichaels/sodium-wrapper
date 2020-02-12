@@ -1,6 +1,7 @@
 const std = @import("std");
 const testing = std.testing;
 const Allocator = std.mem.Allocator;
+const randombytes = @import("randombytes.zig");
 
 const c = @cImport({
     @cInclude("sodium.h");
@@ -9,6 +10,8 @@ const c = @cImport({
 pub const PUBLICKEYBYTES = c.crypto_box_PUBLICKEYBYTES;
 pub const SECRETKEYBYTES = c.crypto_box_SECRETKEYBYTES;
 pub const SEALBYTES = c.crypto_box_SEALBYTES;
+pub const NONCEBYTES = c.crypto_box_NONCEBYTES;
+pub const MACBYTES = c.crypto_box_MACBYTES;
 
 // Wow, Sodium has bad documentation. Here, I'll reproduce all the
 // comments in the header file I'm using (crypto_box.h):
@@ -25,20 +28,23 @@ pub const SEALBYTES = c.crypto_box_SEALBYTES;
 //
 // Wasn't that enlightening?
 // TODO: Figure out what kinds of errors these things can return.
-const NaClError = error{
+const SodiumError = error{
     KeyGenError,
     SealError,
     UnsealError,
+    EncryptError,
+    OpenError,
+    BufferTooSmall,
 };
 
 /// Generate a public/private key pair for use in other functions in
 /// this module.
 pub fn keyPair(
-    pubKey: *[PUBLICKEYBYTES]u8,
-    privKey: *[SECRETKEYBYTES]u8,
-) NaClError!void {
-    if (c.crypto_box_keypair(pubKey, privKey) != 0) {
-        return NaClError.KeyGenError;
+    pub_key: *[PUBLICKEYBYTES]u8,
+    secret_key: *[SECRETKEYBYTES]u8,
+) SodiumError!void {
+    if (c.crypto_box_keypair(pub_key, secret_key) != 0) {
+        return SodiumError.KeyGenError;
     }
 }
 
@@ -52,12 +58,12 @@ pub fn seal(
     const msgLen = message.len;
     const ctxtLen = ciphertext.len;
     if (ctxtLen < msgLen + SEALBYTES) {
-        return NaClError.SealError;
+        return SodiumError.SealError;
     }
 
     const cbSeal = c.crypto_box_seal;
     if (cbSeal(ciphertext.ptr, message.ptr, msgLen, recipient_pk) != 0) {
-        return NaClError.SealError;
+        return SodiumError.SealError;
     }
 }
 
@@ -65,11 +71,11 @@ pub fn seal(
 pub fn sealOpen(
     message: []u8,
     ciphertext: []const u8,
-    pubKey: *const [PUBLICKEYBYTES]u8,
-    privKey: *const [SECRETKEYBYTES]u8,
+    pub_key: *const [PUBLICKEYBYTES]u8,
+    secret_key: *const [SECRETKEYBYTES]u8,
 ) !void {
     if (message.len < (ciphertext.len - SEALBYTES)) {
-        return NaClError.UnsealError;
+        return SodiumError.UnsealError;
     }
     const unseal = c.crypto_box_seal_open;
     const clen = ciphertext.len;
@@ -77,10 +83,67 @@ pub fn sealOpen(
         message.ptr,
         ciphertext.ptr,
         clen,
-        pubKey,
-        privKey,
+        pub_key,
+        secret_key,
     ) != 0) {
-        return NaClError.UnsealError;
+        return SodiumError.UnsealError;
+    }
+}
+
+/// Authenticated public key encryption. It's important that the nonce
+/// never be reused with the same keys. After encrypting with this
+/// method, give ciphertext and nonce to the recipient, along with the
+/// sender's public key.
+///
+/// The ciphertext buffer must be at least MACBYTES longer than the
+/// message.
+pub fn easy(
+    ciphertext: []u8,
+    message: []const u8,
+    nonce: *const [NONCEBYTES]u8,
+    recipient_pub_key: *const [PUBLICKEYBYTES]u8,
+    sender_secret_key: *const [SECRETKEYBYTES]u8,
+) !void {
+    if (ciphertext.len < message.len + MACBYTES) {
+        return SodiumError.BufferTooSmall;
+    }
+    if (c.crypto_box_easy(
+        ciphertext.ptr,
+        message.ptr,
+        message.len,
+        nonce,
+        recipient_pub_key,
+        sender_secret_key,
+    ) != 0) {
+        return SodiumError.EncryptError;
+    }
+
+    return;
+}
+
+/// Authenticated public key decryption. All you need is what's in the
+/// arguments. The message buffer must be able to hold at least
+/// (message.len - MACBYTES) bytes.
+pub fn open_easy(
+    message: []u8,
+    ciphertext: []const u8,
+    nonce: *const [NONCEBYTES]u8,
+    sender_pub_key: *const [PUBLICKEYBYTES]u8,
+    recipient_secret_key: *const [SECRETKEYBYTES]u8,
+) !void {
+    if (message.len < ciphertext.len - MACBYTES) {
+        return SodiumError.BufferTooSmall;
+    }
+
+    if (c.crypto_box_open_easy(
+        message.ptr,
+        ciphertext.ptr,
+        ciphertext.len,
+        nonce,
+        sender_pub_key,
+        recipient_secret_key,
+    ) != 0) {
+        return SodiumError.OpenError;
     }
 }
 
@@ -187,4 +250,28 @@ test "sealer" {
     defer malloc.free(clear);
 
     testing.expectEqualSlices(u8, msg, clear);
+}
+
+test "authenticated encryption" {
+    var alice_pub: [PUBLICKEYBYTES]u8 = undefined;
+    var alice_priv: [SECRETKEYBYTES]u8 = undefined;
+    var bob_pub: [PUBLICKEYBYTES]u8 = undefined;
+    var bob_priv: [SECRETKEYBYTES]u8 = undefined;
+
+    try keyPair(&alice_pub, &alice_priv);
+    try keyPair(&bob_pub, &bob_priv);
+
+    // Bob has a message. He generates a nonce, and uses his private
+    // key and alice's public key to encrypt it.
+    const msg: []const u8 = "A secret message from Bob to Alice"[0..];
+    var encrypted: [msg.len + MACBYTES]u8 = undefined;
+    var nonce: [NONCEBYTES]u8 = undefined;
+    randombytes.buf(nonce[0..]);
+    try easy(encrypted[0..], msg, &nonce, &alice_pub, &bob_priv);
+
+    // Then Bob gives Alice his public key, the encrypted message, and
+    // the nonce.
+    var rcvd: [encrypted.len - MACBYTES]u8 = undefined;
+    try open_easy(rcvd[0..], encrypted[0..], &nonce, &bob_pub, &alice_priv);
+    testing.expectEqualSlices(u8, rcvd[0..], msg);
 }

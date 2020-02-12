@@ -9,4 +9,5 @@ pub const secretstream = @import("secretstream.zig");
 test "nacl" {
     _ = @import("crypto_box.zig");
     _ = @import("secretstream.zig");
+    _ = @import("randombytes.zig");
 }

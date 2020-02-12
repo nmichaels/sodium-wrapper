@@ -228,7 +228,6 @@ pub fn ChunkDecrypter(chunk_size: usize) type {
     };
 }
 
-
 test "stream" {
     const msg = "Check check wheeee";
     const msg2 = "Eekers";
