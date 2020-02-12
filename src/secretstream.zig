@@ -2,19 +2,12 @@ const std = @import("std");
 const Allocator = std.mem.Allocator;
 const ArrayList = std.ArrayList;
 const testing = std.testing;
+const sodium = @import("sodium.zig");
+const SodiumError = sodium.SodiumError;
 
 const c = @cImport({
     @cInclude("sodium.h");
 });
-
-const StreamError = error{
-    BufferTooShort,
-    ChunkTooBig,
-    EncryptError,
-    InvalidCiphertext,
-    InitError,
-    InvalidHeader,
-};
 
 const Tag = enum {
     MESSAGE = c.crypto_secretstream_xchacha20poly1305_TAG_MESSAGE,
@@ -44,7 +37,7 @@ pub fn init_push(
 ) !void {
     const fun = c.crypto_secretstream_xchacha20poly1305_init_push;
     if (fun(state, header, key) != 0) {
-        return StreamError.InitError;
+        return SodiumError.InitError;
     }
 }
 
@@ -62,7 +55,7 @@ pub fn push(
     // crypto_secretstream_xchacha20poly1305_ABYTES, so let's make
     // sure there's room.
     if (ciphertext.len < (message.len + ABYTES)) {
-        return StreamError.BufferTooShort;
+        return SodiumError.BufferTooSmall;
     }
     const res = c.crypto_secretstream_xchacha20poly1305_push(
         state,
@@ -76,10 +69,10 @@ pub fn push(
     );
     if (clen > ciphertext.len) {
         // I don't trust guarantees that aren't in the source code.
-        return StreamError.BufferTooShort;
+        return SodiumError.BufferTooSmall;
     }
     if (res != 0) {
-        return StreamError.EncryptError;
+        return SodiumError.EncryptError;
     }
 }
 
@@ -92,7 +85,7 @@ pub fn init_pull(
 ) !void {
     const fun = c.crypto_secretstream_xchacha20poly1305_init_pull;
     if (fun(state, header, key) != 0) {
-        return StreamError.InvalidHeader;
+        return SodiumError.InvalidHeader;
     }
 }
 
@@ -106,7 +99,7 @@ pub fn pull(
     additional_data: ?[]const u8,
 ) !void {
     if (message.len < ciphertext.len - ABYTES) {
-        return StreamError.BufferTooShort;
+        return SodiumError.BufferTooSmall;
     }
     var mlen: c_ulonglong = undefined;
     const res = c.crypto_secretstream_xchacha20poly1305_pull(
@@ -120,10 +113,10 @@ pub fn pull(
         if (additional_data) |ad| ad.len else 0,
     );
     if (res != 0) {
-        return StreamError.InvalidCiphertext;
+        return SodiumError.InvalidCiphertext;
     }
     if (mlen > message.len) {
-        return StreamError.BufferTooShort;
+        return SodiumError.BufferTooSmall;
     }
 }
 
@@ -161,7 +154,7 @@ pub fn ChunkEncrypter(chunk_size: usize) type {
         /// Call with data to encrypt it.
         pub fn push_chunk(self: *Self, msg: []const u8) !void {
             if (msg.len > chunk_size) {
-                return StreamError.ChunkTooBig;
+                return SodiumError.ChunkTooBig;
             }
             // There's probably a better way to do this than to copy
             // the whole array over to the stack, byte by byte.
@@ -229,6 +222,7 @@ pub fn ChunkDecrypter(chunk_size: usize) type {
 }
 
 test "stream" {
+    try sodium.init();
     const msg = "Check check wheeee";
     const msg2 = "Eekers";
     var key: [KEYBYTES]u8 = undefined;
@@ -252,6 +246,7 @@ test "stream" {
 }
 
 test "chunks" {
+    try sodium.init();
     const msg = "This message is longer than my chunk size.";
     const malloc = std.heap.c_allocator;
     var key: [KEYBYTES]u8 = undefined;

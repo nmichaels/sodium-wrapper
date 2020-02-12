@@ -1,5 +1,6 @@
 const std = @import("std");
 const testing = std.testing;
+const sodium = @import("sodium.zig");
 
 const c = @cImport({
     @cInclude("sodium.h");
@@ -47,6 +48,7 @@ pub fn stir(void) void {
 }
 
 test "random numbers" {
+    try sodium.init();
     _ = random();
     _ = uniform(0xd00dface);
     var buffer = [_]u8{ 1, 2, 3, 4, 5 };

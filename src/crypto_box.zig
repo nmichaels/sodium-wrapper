@@ -2,6 +2,8 @@ const std = @import("std");
 const testing = std.testing;
 const Allocator = std.mem.Allocator;
 const randombytes = @import("randombytes.zig");
+const sodium = @import("sodium.zig");
+const SodiumError = sodium.SodiumError;
 
 const c = @cImport({
     @cInclude("sodium.h");
@@ -28,14 +30,6 @@ pub const MACBYTES = c.crypto_box_MACBYTES;
 //
 // Wasn't that enlightening?
 // TODO: Figure out what kinds of errors these things can return.
-const SodiumError = error{
-    KeyGenError,
-    SealError,
-    UnsealError,
-    EncryptError,
-    OpenError,
-    BufferTooSmall,
-};
 
 /// Generate a public/private key pair for use in other functions in
 /// this module.
@@ -147,6 +141,8 @@ pub fn open_easy(
     }
 }
 
+// TODO: wrap sodium_malloc in an Allocator and point people to it.
+
 /// Dynamic sealing object. Uses a mem.Allocator to allocate memory
 /// for ciphertext.
 ///
@@ -219,6 +215,7 @@ pub const Unsealer = struct {
 };
 
 test "seal" {
+    try sodium.init();
     var pk: [PUBLICKEYBYTES]u8 = undefined;
     var sk: [SECRETKEYBYTES]u8 = undefined;
 
@@ -235,6 +232,7 @@ test "seal" {
 }
 
 test "sealer" {
+    try sodium.init();
     var pk: [PUBLICKEYBYTES]u8 = undefined;
     var sk: [SECRETKEYBYTES]u8 = undefined;
     try keyPair(&pk, &sk);
@@ -253,6 +251,7 @@ test "sealer" {
 }
 
 test "authenticated encryption" {
+    try sodium.init();
     var alice_pub: [PUBLICKEYBYTES]u8 = undefined;
     var alice_priv: [SECRETKEYBYTES]u8 = undefined;
     var bob_pub: [PUBLICKEYBYTES]u8 = undefined;
