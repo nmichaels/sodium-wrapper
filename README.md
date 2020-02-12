@@ -6,3 +6,5 @@ It's very incomplete. It's not even plete.
 
 Requires libsodium-dev or, if not on Debian, some package that
 provides sodium.h.
+
+Official home: https://hg.sr.ht/~nmichaels/sodium-wrapper
