@@ -5,7 +5,7 @@ const c = @cImport({
     @cInclude("sodium.h");
 });
 
-const Errors = error { BufTooBig };
+const Errors = error{BufTooBig};
 
 pub const SEEDBYTES = c.randombytes_SEEDBYTES;
 
@@ -49,10 +49,10 @@ pub fn stir(void) void {
 test "random numbers" {
     _ = random();
     _ = uniform(0xd00dface);
-    var buffer = [_]u8 { 1, 2, 3, 4, 5 };
+    var buffer = [_]u8{ 1, 2, 3, 4, 5 };
     buf(buffer[0..]);
-    const seed: [SEEDBYTES]u8 = [_]u8 { 0 } ** SEEDBYTES;
+    const seed: [SEEDBYTES]u8 = [_]u8{0} ** SEEDBYTES;
     try buf_deterministic(buffer[0..], &seed);
-    const nonrandom = [_]u8 { 0xa1, 0x1f, 0x8f, 0x12, 0xd0 };
+    const nonrandom = [_]u8{ 0xa1, 0x1f, 0x8f, 0x12, 0xd0 };
     testing.expectEqualSlices(u8, buffer[0..], nonrandom[0..]);
 }
