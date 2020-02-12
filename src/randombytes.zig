@@ -27,7 +27,7 @@ pub fn buf(buffer: []u8) void {
 /// Fill buffer with bytes that are indistinguishable from random
 /// without seed. For a given seed, this function will always output
 /// the same sequence.
-pub fn buf_deterministic(buffer: []u8, seed: *const [SEEDBYTES]u8) !void {
+pub fn bufDeterministic(buffer: []u8, seed: *const [SEEDBYTES]u8) !void {
     if (buffer.len > (1 << 38)) {
         return Errors.BufTooBig;
     }
@@ -52,7 +52,7 @@ test "random numbers" {
     var buffer = [_]u8{ 1, 2, 3, 4, 5 };
     buf(buffer[0..]);
     const seed: [SEEDBYTES]u8 = [_]u8{0} ** SEEDBYTES;
-    try buf_deterministic(buffer[0..], &seed);
+    try bufDeterministic(buffer[0..], &seed);
     const nonrandom = [_]u8{ 0xa1, 0x1f, 0x8f, 0x12, 0xd0 };
     testing.expectEqualSlices(u8, buffer[0..], nonrandom[0..]);
 }
