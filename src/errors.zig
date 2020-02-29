@@ -11,4 +11,6 @@ pub const SodiumError = error{
     InvalidHeader,
     SignError,
     InvalidSignature,
+    LockFailure,
+    UnlockFailure,
 };

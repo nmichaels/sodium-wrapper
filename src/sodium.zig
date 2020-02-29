@@ -7,6 +7,7 @@ pub const crypto_box = @import("crypto_box.zig");
 pub const crypto_sign = @import("crypto_sign.zig");
 pub const secretstream = @import("secretstream.zig");
 pub const randombytes = @import("randombytes.zig");
+pub const mem = @import("mem.zig");
 pub const SodiumError = @import("errors.zig").SodiumError;
 
 pub fn init() !void {
@@ -20,4 +21,5 @@ test "nacl" {
     _ = @import("secretstream.zig");
     _ = @import("randombytes.zig");
     _ = @import("crypto_sign.zig");
+    _ = @import("mem.zig");
 }
