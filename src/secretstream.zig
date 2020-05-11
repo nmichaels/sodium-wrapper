@@ -267,14 +267,15 @@ test "chunks" {
     var decrypter = try Decrypter.init(malloc, key, encrypter.hdr);
     defer decrypter.deinit();
 
-    for (encrypter.data.toSlice()) |chunk| {
+    for (encrypter.data.items) |chunk| {
         try decrypter.pull_chunk(chunk);
     }
 
-    const decrypted = try malloc.alloc(u8, decrypter.data.len * chunk_size);
+    const decrypted = try malloc.alloc(u8, decrypter.data.items.len *
+        chunk_size);
     defer malloc.free(decrypted);
 
-    for (decrypter.data.toSlice()) |chunk, off| {
+    for (decrypter.data.items) |chunk, off| {
         const base: usize = off * chunk_size;
         var idx: usize = 0;
         while (idx < chunk_size) : (idx += 1) {
