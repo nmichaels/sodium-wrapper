@@ -3,7 +3,7 @@ const testing = std.testing;
 const Allocator = std.mem.Allocator;
 const randombytes = @import("randombytes.zig");
 const sodium = @import("sodium.zig");
-const SodiumError = sodium.SodiumError;
+const SodiumError = @import("errors.zig").SodiumError;
 
 const c = @cImport({
     @cInclude("sodium.h");
