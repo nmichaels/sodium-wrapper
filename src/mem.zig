@@ -48,10 +48,7 @@ fn sodiumAlloc(
     var bytes = len;
     const alignment = std.math.max(ptr_align, len_align);
     if (alignment != 0) {
-        // Slow but easy. Fix with math later.
-        while (bytes % alignment != 0) {
-            bytes += 1;
-        }
+        bytes = std.mem.alignForward(len, alignment);
     }
 
     // Zig helps prevent access past the end of the slice, but that's
@@ -62,7 +59,7 @@ fn sodiumAlloc(
     else if (len_align == 0)
         len
     else
-        len + (len_align - (len % len_align));
+        std.mem.alignForward(len, len_align);
 
     const allocated = c.sodium_malloc(bytes);
     if (allocated) |ptr| {
@@ -85,16 +82,7 @@ fn sodiumResize(
         c.sodium_free(buf.ptr);
         return 0;
     }
-    const real_new_len = len: {
-        if (len_align == 0) {
-            break :len new_len;
-        }
-        var bytes = new_len;
-        while (bytes % len_align != 0) {
-            bytes += 1;
-        }
-        break :len bytes;
-    };
+    const real_new_len = std.mem.alignAllocLen(buf.len, new_len, len_align);
 
     zero(buf[real_new_len..]);
     return real_new_len;
@@ -135,4 +123,55 @@ test "sodium allocator" {
         sum += val;
     }
     testing.expectEqual(sum, 1225);
+}
+
+// expectIllegalBehavior Stolen from https://github.com/fengb/zee_alloc
+// Copyright (c) 2019 Benjamin Feng
+// Permission is hereby granted, free of charge, to any person
+// obtaining a copy of this software and associated documentation
+// files (the "Software"), to deal in the Software without
+// restriction, including without limitation the rights to use, copy,
+// modify, merge, publish, distribute, sublicense, and/or sell copies
+// of the Software, and to permit persons to whom the Software is
+// furnished to do so, subject to the following conditions:
+//
+// The above copyright notice and this permission notice shall be
+// included in all copies or substantial portions of the Software.
+fn expectIllegalBehavior(context: anytype, comptime func: anytype) !void {
+    if (!@hasDecl(std.os.system, "fork") or !std.debug.runtime_safety) return;
+
+    const child_pid = try std.os.fork();
+    if (child_pid == 0) {
+        const null_fd = std.os.openZ("/dev/null", std.os.O_RDWR, 0) catch {
+            std.debug.print("Cannot open /dev/null\n", .{});
+            std.os.exit(0);
+        };
+        std.os.dup2(null_fd, std.io.getStdErr().handle) catch {
+            std.debug.print("Cannot close child process stderr\n", .{});
+            std.os.exit(0);
+        };
+
+        func(context); // this should crash
+        std.os.exit(0);
+    } else {
+        const status = std.os.waitpid(child_pid, 0);
+        // Maybe we should use a fixed error code instead of checking
+        // status != 0
+        if (status == 0)
+            @panic("Expected illegal behavior but succeeded instead");
+    }
+}
+
+fn accessPastEnd(slice: []u8) void {
+    const ptr = @ptrCast([*]u8, slice.ptr);
+    ptr[slice.len] = 1;
+}
+
+test "Crash" {
+    try sodium.init();
+    const buf_size = 1;
+    var slice = sodium_allocator.alloc(u8, buf_size) catch return;
+    defer sodium_allocator.free(slice);
+    slice[0] = 7;
+    try expectIllegalBehavior(slice, accessPastEnd);
 }
