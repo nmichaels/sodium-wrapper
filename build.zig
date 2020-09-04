@@ -2,6 +2,7 @@ const Builder = @import("std").build.Builder;
 const std = @import("std");
 
 pub fn build(b: *Builder) void {
+    const target = b.standardTargetOptions(.{});
     const mode = b.standardReleaseOptions();
     const lib = b.addStaticLibrary("sodium", "src/sodium.zig");
     lib.setBuildMode(mode);
@@ -9,6 +10,7 @@ pub fn build(b: *Builder) void {
 
     var tests = b.addTest("src/sodium.zig");
     tests.setBuildMode(mode);
+    tests.setTarget(target);
     tests.linkSystemLibrary("c");
     tests.linkSystemLibrary("sodium");
 
