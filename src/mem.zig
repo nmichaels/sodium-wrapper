@@ -157,7 +157,7 @@ fn expectIllegalBehavior(context: anytype, comptime func: anytype) !void {
         func(context); // this should crash
         std.os.exit(0);
     } else {
-        const status = std.os.waitpid(child_pid, 0);
+        const status = std.os.waitpid(child_pid, 0).status;
         // Maybe we should use a fixed error code instead of checking
         // status != 0
         if (status == 0)
